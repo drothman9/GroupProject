@@ -1,0 +1,462 @@
+---
+title: "R Notebook"
+output: html_notebook
+---
+
+```{r}
+link='https://github.com/drothman9/GroupProject/raw/master/FinalMerge.RDS'
+# a RDS file from the web needs:
+DanFile=url(link)
+```
+
+```{r}
+# reading in data:
+fromDaniel=readRDS(file = DanFile)
+
+# reset indexes to R format:
+row.names(fromDaniel)=NULL
+```
+
+```{r}
+# convert GDP to GDP in billions
+fromDaniel$GDP_Billions=fromDaniel$GDP/10^9
+fromDaniel=fromDaniel[complete.cases(fromDaniel),]
+```
+
+```{r}
+# create SubData for the dataframe
+SubData=(fromDaniel[,c(3,5,7,8)])
+# pull row names from original data frame
+row.names(SubData)=fromDaniel$Country
+head(SubData)
+# keep only complete cases of the subdata
+SubData=SubData[complete.cases(SubData),]
+```
+
+```{r}
+set.seed(999)
+```
+
+```{r}
+library(cluster)
+#  Decide distance method and compute distance matrix
+SubData_D=cluster::daisy(x=SubData,metric="gower")
+```
+
+```{r}
+# Decide on 6 clusters and set the function to cluster by partitioning
+NumCluster=6
+res.pam = pam(x=SubData_D,k = NumCluster,cluster.only = F)
+```
+
+```{r}
+# Add cluster results to original data frame
+fromDaniel$pam=as.factor(res.pam$clustering)
+```
+
+```{r}
+# Querying data frame by cluster and country
+fromDaniel[fromDaniel$pam==1,'Country']
+```
+
+```{r}
+fromDaniel[fromDaniel$pam==2,'Country']
+```
+```{r}
+fromDaniel[fromDaniel$pam==3,'Country']
+```
+```{r}
+fromDaniel[fromDaniel$pam==4,'Country']
+```
+```{r}
+fromDaniel[fromDaniel$pam==5,'Country']
+```
+```{r}
+fromDaniel[fromDaniel$pam==6,'Country']
+```
+
+```{r}
+library(factoextra)
+```
+
+```{r}
+# generating silhouettes for partitioning cluster results
+fviz_silhouette(res.pam)
+```
+
+```{r}
+# saving silhouettes for cluster results
+pamEval=data.frame(res.pam$silinfo$widths)
+head(pamEval)
+```
+
+```{r}
+#requesting silhouettes
+pamEval[pamEval$sil_width<0,]
+```
+
+```{r}
+library(factoextra)
+# apply agglomerative function and select number of clusters
+res.agnes= hcut(SubData_D, k = NumCluster,isdiss=T,
+                 hc_func='agnes',
+                 hc_method = "ward.D2")
+```
+
+```{r}
+# add agglomerative cluster results to original data frame
+fromDaniel$agn=as.factor(res.agnes$cluster)
+```
+
+```{r}
+# Query cluster results by cluster number and country
+fromDaniel[fromDaniel$agn==1,'Country']
+```
+
+```{r}
+# Report cluster results in a table
+table(fromDaniel$agn)
+```
+
+```{r}
+# generate dendogram for the agglomerative cluster results
+fviz_dend(res.agnes,k=NumCluster, cex = 0.7, horiz = T)
+```
+
+```{r}
+library(factoextra)
+# generate silhouettes for agglomerative cluster results
+fviz_silhouette(res.agnes)
+```
+
+```{r}
+# save silhouettes
+agnEval=data.frame(res.agnes$silinfo$widths)
+head(agnEval)
+```
+
+```{r}
+# request negative silhouettes
+agnEval[agnEval$sil_width<0,]
+```
+
+```{r}
+library(factoextra)
+# apply divisive clustering technique
+res.diana= hcut(SubData_D, k = NumCluster,
+                 hc_func='diana',
+                 hc_method = "ward.D")
+```
+
+```{r}
+# save divisive clustering technique to original data frame
+fromDaniel$dia=as.factor(res.diana$cluster)
+```
+
+```{r}
+# query cluster results by cluster number and country
+fromDaniel[fromDaniel$dia==1,'Country']
+```
+
+```{r}
+# generate cluster results in a table
+table(fromDaniel$dia)
+```
+
+```{r}
+# report dendogram for divisive cluster results
+fviz_dend(res.diana,k=NumCluster, cex = 0.7, horiz = T)
+```
+
+```{r}
+library(factoextra)
+# generate silhouettes for divisive cluster results
+fviz_silhouette(res.diana)
+```
+
+```{r}
+# save silhouettes 
+diaEval=data.frame(res.diana$silinfo$widths)
+head(diaEval)
+```
+
+```{r}
+# request silhouettes
+diaEval[diaEval$sil_width<0,]
+```
+
+```{r}
+library(dbscan)
+#minNeighs> num cols in data
+minNeighs=4
+kNNdistplot(SubData_D, k = minNeighs)
+abline(h=.03, col = "red", lty=2)
+```
+
+```{r}
+# set distance and apply density-based cluster function
+distance=0.03
+res.db = dbscan::dbscan(SubData_D, eps=distance, 
+                     minPts=minNeighs)
+```
+
+```{r}
+# '0' identifies outliers: 
+res.db
+```
+
+```{r}
+# save results
+fromDaniel$db=as.factor(res.db$cluster)
+```
+
+```{r}
+# Prepare a bidimensional map
+projectedData = cmdscale(SubData_D, k=2)
+# save coordinates to original data frame:
+fromDaniel$dim1 = projectedData[,1]
+fromDaniel$dim2 = projectedData[,2]
+```
+
+```{r}
+# see the map
+base= ggplot(data=fromDaniel,
+             aes(x=dim1, y=dim2,
+                 label=Country)) 
+base + geom_text(size=2)
+```
+
+```{r}
+# plot results from PAM
+pamPlot=base + labs(title = "PAM") + geom_point(size=2,
+                                              aes(color=pam),
+                                              show.legend = F)  
+```
+
+```{r}
+# plot results from AGN
+agnPlot=base + labs(title = "AGNES") + geom_point(size=2,
+                                              aes(color=agn),
+                                              show.legend = F) 
+```
+
+```{r}
+# plot results from DIA
+diaPlot=base + labs(title = "DIANA") + geom_point(size=2,
+                                              aes(color=dia),
+                                              show.legend = F) 
+```
+
+```{r}
+library(ggpubr)
+```
+
+```{r}
+# compare plots visually
+ggarrange(pamPlot, agnPlot, diaPlot,ncol = 3)
+```
+
+```{r}
+# plot results from DBscan
+dbPlot= base + labs(title = "DBSCAN") + geom_point(aes(color=db),
+                                               show.legend = T) 
+dbPlot
+```
+
+```{r}
+# annotating
+library(ggrepel)
+dbPlot + geom_text_repel(size=3,aes(label=Country))
+```
+
+```{r}
+# annotating outliers
+LABEL=ifelse(fromDaniel$db==0,fromDaniel$Country,"")
+
+dbPlot + geom_text_repel(aes(label=LABEL))
+```
+
+```{r}
+# Define hypothesis
+hypo1=formula(PercentageRenewable~ ECO.current)
+hypo2=formula(PercentageRenewable~ ECO.current + GDP_Billions)
+hypo3=formula(PercentageRenewable~ ECO.current + GDP_Billions + functioningofgov)
+```
+
+```{r}
+# define columns needed for the regressions
+colsNeeded=c('PercentageRenewable', 'ECO.current','GDP_Billions','functioningofgov')
+```
+
+```{r}
+#verify data types
+str(fromDaniel)#[,colsNeeded])
+```
+
+```{r}
+# Create dataset and rename rows by country
+DataRegGauss=fromDaniel[,colsNeeded]
+row.names(DataRegGauss)=fromDaniel$Country
+```
+
+```{r}
+# compute regression results
+gauss1=glm(hypo1,data = DataRegGauss,family = 'gaussian')
+gauss2=glm(hypo2,data = DataRegGauss,family = 'gaussian')
+gauss3=glm(hypo3,data = DataRegGauss,family = 'gaussian')
+```
+
+```{r}
+# see results for each regression
+summary(gauss1)
+```
+
+```{r}
+summary(gauss2)
+```
+
+```{r}
+summary(gauss3)
+```
+```{r}
+install.packages("stargazer")
+library(stargazer)
+```
+
+```{r}
+stargazer(gauss1, gauss2, gauss3, type="html",
+ dep.var.labels=c("Percentage Renewables"),
+ covariate.labels=c("Ecosystem Vitality","GDP","Functioning of Government"), out="models.htm")
+```
+
+```{r}
+# look for a better model, ANOVA
+anova(gauss1,gauss2,gauss3,test="LRT")
+```
+
+```{r}
+# generate r-squared values
+library(rsq)
+rsq(gauss1,adj=T)
+```
+
+```{r}
+library(rsq)
+rsq(gauss2,adj=T)
+```
+
+```{r}
+library(rsq)
+rsq(gauss3,adj=T)
+```
+
+```{r}
+# plot residuals vs fitted observations
+plot(gauss1,1)
+```
+
+```{r}
+plot(gauss2,1)
+```
+
+```{r}
+plot(gauss3,1)
+```
+
+```{r}
+# plot a normal Q-Q plot
+plot(gauss1,2)
+```
+
+```{r}
+plot(gauss2,2)
+```
+
+```{r}
+plot(gauss3,2)
+```
+
+```{r}
+# plot a shapiro-wilkes test to confirm homoskedasticity
+shapiro.test(gauss1$residuals)
+```
+
+```{r}
+# generate results from Shaprio-Wilkes Test
+shapiro.test(gauss2$residuals)
+```
+
+```{r}
+shapiro.test(gauss3$residuals)
+```
+
+```{r}
+#visual exploration of residuals
+plot(gauss1, 3)
+```
+
+```{r}
+plot(gauss2, 3)
+```
+
+```{r}
+plot(gauss3, 3)
+```
+
+```{r}
+library(lmtest)
+```
+
+```{r}
+# Breusch-Pagan test for heteroskedasticity
+bptest(gauss1)
+```
+
+```{r}
+bptest(gauss2)
+```
+
+```{r}
+bptest(gauss3)
+```
+
+```{r}
+library(car)
+```
+
+```{r}
+# Analize the effect of atypical values
+plot(gauss1,5)
+```
+
+```{r}
+plot(gauss2,5)
+```
+
+```{r}
+plot(gauss3,5)
+```
+
+```{r}
+# Query the results
+gaussInf=as.data.frame(influence.measures(gauss1)$is.inf)
+gaussInf[gaussInf$cook.d,]
+```
+
+```{r}
+library(sjPlot)
+```
+
+```{r}
+# plot summary plot
+plot_models(gauss1,vline.color = "grey")
+```
+
+```{r}
+plot_models(gauss2,vline.color = "grey")
+```
+
+```{r}
+plot_models(gauss3,vline.color = "grey")
+```
+
